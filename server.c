@@ -316,6 +316,7 @@ int main(int argc, char **argv) {
         usage(argc, argv);
     }
 
+    //TCP Channel
     int s;
     s = socket(storage.ss_family, SOCK_STREAM, 0);
     if (s == -1) {

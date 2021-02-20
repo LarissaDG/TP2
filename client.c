@@ -52,6 +52,8 @@ void recv_msg() {
   	flag = 1;
 }
 
+//unsigned short int => 2 bytes
+
 int main(int argc, char **argv){
 	if (argc < 4) {
 		usage(argc, argv);
