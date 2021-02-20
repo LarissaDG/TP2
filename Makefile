@@ -5,4 +5,4 @@ all:
 	gcc -Wall server.c common.o lista.o -lpthread -o servidor
 
 clean:
-	rm common.o client server server-mt
+	rm common.o cliente servidor lista.o
