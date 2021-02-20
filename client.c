@@ -10,6 +10,7 @@
 #include <pthread.h>
 
 #include "common.h"
+#include "msgs_struct.h"
 
 #define LENGTH 500
 
@@ -28,6 +29,7 @@ int flag = 0;
 
 void send_msg() {
 	char buffer[LENGTH] = {};
+	//hello_msg hello;
   	while(1) {
   		fflush(stdout);
     	fgets(buffer, LENGTH, stdin);
@@ -52,7 +54,6 @@ void recv_msg() {
   	flag = 1;
 }
 
-//unsigned short int => 2 bytes
 
 int main(int argc, char **argv){
 	if (argc < 4) {

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "lista.h"
+#include "msgs_struct.h"
 
 #include <pthread.h>
 #include <ctype.h>
