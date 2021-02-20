@@ -1,5 +1,3 @@
 *.pdf
-*docx
-servidor
-cliente
+*.docx
 *.o
