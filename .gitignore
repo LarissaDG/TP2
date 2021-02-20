@@ -1,0 +1,5 @@
+*.pdf
+*docx
+server
+client
+*.o
