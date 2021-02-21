@@ -28,7 +28,7 @@ int flag = 0;
 void send_msg() {
 	//Mensagem HELLO
 	char buffer[BUFSZ] = {};
-	determina_etapa(1, buffer);
+	determina_etapa(1,0, buffer);
 	send(s, buffer, strlen(buffer), 0);
 	memset(buffer, 0, BUFSZ);
   	/*while(1) {
@@ -47,19 +47,19 @@ void recv_msg() {
       		//printf("%s", buffer);
       		if(buffer[0]=='2'){
       			 printf("Mensagem recebida: Connection\n");
-      			 determina_etapa(3, buffer);
+      			 determina_etapa(3,0, buffer);
       			 send(s, buffer, strlen(buffer), 0);
 				 memset(buffer, 0, BUFSZ);
       		}
       		if(buffer[0]=='4'){
       			 printf("Mensagem recebida: ok\n");
-      			 determina_etapa(6, buffer);
+      			 determina_etapa(6, 0,buffer);
       			 send(s, buffer, strlen(buffer), 0);
 				 memset(buffer, 0, BUFSZ);
       		}
       		if(buffer[0]=='7'){
       			 printf("Mensagem recebida: Ack\n");
-      			 determina_etapa(5, buffer);
+      			 determina_etapa(5, 0, buffer);
       			 send(s, buffer, strlen(buffer), 0);
 				 memset(buffer, 0, BUFSZ);
       		}

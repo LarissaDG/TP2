@@ -8,7 +8,7 @@
 #include "common.h"
 
 void tostring(hello_msg sms, char buffer[], int tam){
-    sprintf(buffer,"%d",sms.msg_id);
+    sprintf(buffer,"%d %u",sms.msg_id, sms.udp_port);
 }
 
 void logexit(const char *msg) {
@@ -105,10 +105,13 @@ int server_sockaddr_init(const char *proto, const char *portstr,
     }
 }
 
-void determina_etapa(int num, char buffer[]){
+void determina_etapa(int num, unsigned porta, char buffer[]){
     hello_msg mensagem;
 
     mensagem.msg_id = num;
+    if(porta > 0){
+        mensagem.udp_port = porta;
+    }
 
     tostring(mensagem, buffer, BUFSZ);
     printf("Mensagem enviada: %s\n", buffer);

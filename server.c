@@ -28,7 +28,7 @@ struct client_data {
     int csock;
     struct sockaddr_storage storage;
     int id;
-    lista tags;
+    unsigned udp_port;
 };
 
 struct client_data *Clientes [MAX_CLIENTES];
@@ -49,12 +49,10 @@ int addCliente(struct client_data *cdata ){
     for(i=0; i < MAX_CLIENTES; i++){
         if(Clientes[i] == NULL){
             Clientes[i] = cdata;
-            //printf("i = %d\n", i);
             break;
         }
     }
     pthread_mutex_unlock(&clients_mutex);
-    //printf("i = %d\n",i);
     return i;
 }
 
@@ -102,32 +100,25 @@ int isValido(char c){
     return 1;
 }
 
-
-int isKill(struct client_data *cliente ,char *buf, int tam){
-    if(strcmp(buf,"##kill\n")==0){
-        return 1;
-    }
-    return 0;
-}
-
-
-void processa_entrada(struct client_data *cliente, char* buf, int cid, char* dest){
+void processa_entrada(struct client_data *cliente, char* buf, int cid, char* dest, struct sockaddr_in6 server_addr_UDP){
+    unsigned porta = 0;
     if(isInvalido(cliente,buf,sizeof(buf))){
         strcpy(dest,"Invalid caracter");
     }
     if(buf[0] == '1'){
         printf("Mensagem recebida: Hello\n");
-        determina_etapa(2, dest);
+        porta = ntohl(server_addr_UDP.sin6_port);
+        determina_etapa(2,porta,dest);
         return ;
     }
     if(buf[0] == '3'){
         printf("Mensagem recebida: info file\n");
-        determina_etapa(4, dest);
+        determina_etapa(4, porta, dest);
         return ;
     }
     if(buf[0] == '6'){
         printf("Mensagem recebida: file\n");
-        determina_etapa(7, dest);
+        determina_etapa(7, porta, dest);
         return ;
     }
     if(buf[0] == '5'){
@@ -148,10 +139,15 @@ int send_msg(char *output, struct client_data *cdata){
     return count == (strlen(output) + 1);
 }
 
+
+/*Esta função é chamada toda vez que criamos uma nova thread para um cliente, ou seja,
+novo cliente implica em nova thread. O que por sua vez que o cliente é acionado a um vetor de clientes.
+Ela trata de receber as mensagens dos clientes, trata-las e dar as devidas respostas. As respostas incluem:
+alocar uma porta UDP para elas, criar um soquete UDP, etc.*/
+
 void * client_thread(void *data) {
     struct client_data *cdata = (struct client_data *)data;
     struct sockaddr *caddr = (struct sockaddr *)(&cdata->storage);
-    CriaListaVazia(&(cdata->tags));
     int cid = addCliente(cdata);
     cdata->id = cid;
     
@@ -163,19 +159,39 @@ void * client_thread(void *data) {
     char dest[BUFSZ];
     memset(buf, 0, BUFSZ);
     size_t count;
+
+    /* CRIA UDP*/
+    //Cria socket UDP
+    int udp_socket;
+    struct sockaddr_in6 server_addr_UDP;
+    udp_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+
+    if(udp_socket < 0){
+        logexit("Soquete UDP");
+    }
+
+    //Seta porto e IP do UDP
+    server_addr_UDP.sin6_family = AF_INET6;
+    server_addr_UDP.sin6_port = htons(2000);
+    //printf("Funfou\n");
+    
+    //UDP bind
+    if(bind(udp_socket, (struct sockaddr*)&server_addr_UDP, sizeof(server_addr_UDP)) < 0){
+        //printf("Couldn't bind to the port\n");
+        logexit("bind UDP");
+    }
+    //printf("Done with binding\n");
+
+    // FIM UDP
+    
     
     while(1){
         memset(buf, 0, BUFSZ);
         count = recv(cdata->csock, buf, BUFSZ - 1, 0);
         //printf("%s\n",buf);
         if(count > 0){
-            //publish or command (+, - , ##kill ...)
-            processa_entrada(cdata,buf, cid, dest);
-            //printf("Output = -%s-\n", output);
+            processa_entrada(cdata,buf, cid, dest, server_addr_UDP);
             if(strcmp(dest,"Invalid caracter")==0) break;
-            /*if(strcmp(output,"tag enviada")==0){
-                continue;
-            }*/
             if(strcmp(dest,"fim")==0){
                 printf("Fim\n");
                 exit(1);
@@ -216,11 +232,14 @@ int main(int argc, char **argv) {
         logexit("socket");
     }
 
+
+    //TCP reuso
     int enable = 1;
     if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int))) {
         logexit("setsockopt");
     }
 
+    //TCP bind
     struct sockaddr *addr = (struct sockaddr *)(&storage);
     if (0 != bind(s, addr, sizeof(storage))) {
         logexit("bind");
@@ -258,3 +277,4 @@ int main(int argc, char **argv) {
 
     exit(EXIT_SUCCESS);
 }
+
