@@ -10,9 +10,6 @@
 #include <pthread.h>
 
 #include "common.h"
-#include "msgs_struct.h"
-
-#define LENGTH 500
 
 //Entradas Servidor e o porto
 void usage(int argc, char **argv) {
@@ -27,23 +24,45 @@ int s = 0;
 //Exit flag
 int flag = 0;
 
+
 void send_msg() {
-	char buffer[LENGTH] = {};
-	//hello_msg hello;
-  	while(1) {
+	//Mensagem HELLO
+	char buffer[BUFSZ] = {};
+	determina_etapa(1, buffer);
+	send(s, buffer, strlen(buffer), 0);
+	memset(buffer, 0, BUFSZ);
+  	/*while(1) {
   		fflush(stdout);
-    	fgets(buffer, LENGTH, stdin);
+    	fgets(buffer, BUFSZ, stdin);
       	send(s, buffer, strlen(buffer), 0);
-		memset(buffer, 0, LENGTH);
- 	}
+		memset(buffer, 0, BUFSZ);
+ 	}*/
 }
 
 void recv_msg() {
-	char buffer[LENGTH] = {};
+	char buffer[BUFSZ] = {};
   	while (1) {
-		int receive = recv(s, buffer, LENGTH, 0);
+		int receive = recv(s, buffer, BUFSZ, 0);
     	if (receive > 0) {
-      		printf("%s", buffer);
+      		//printf("%s", buffer);
+      		if(buffer[0]=='2'){
+      			 printf("Mensagem recebida: Connection\n");
+      			 determina_etapa(3, buffer);
+      			 send(s, buffer, strlen(buffer), 0);
+				 memset(buffer, 0, BUFSZ);
+      		}
+      		if(buffer[0]=='4'){
+      			 printf("Mensagem recebida: ok\n");
+      			 determina_etapa(6, buffer);
+      			 send(s, buffer, strlen(buffer), 0);
+				 memset(buffer, 0, BUFSZ);
+      		}
+      		if(buffer[0]=='7'){
+      			 printf("Mensagem recebida: Ack\n");
+      			 determina_etapa(5, buffer);
+      			 send(s, buffer, strlen(buffer), 0);
+				 memset(buffer, 0, BUFSZ);
+      		}
       		fflush(stdout);
     	} 
     	else{
@@ -51,6 +70,7 @@ void recv_msg() {
     	} 
 		memset(buffer, 0, sizeof(buffer));
   	}
+  	//printf("Saiu\n");
   	flag = 1;
 }
 
@@ -60,7 +80,7 @@ int main(int argc, char **argv){
 		usage(argc, argv);
 	}
 	
-	//Socket
+	//Estabelece conexão com o TCP
 	struct sockaddr_storage storage;
 	if (0 != addrparse(argv[1], argv[2], &storage)) {
 		usage(argc, argv);

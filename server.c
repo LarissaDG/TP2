@@ -1,6 +1,5 @@
 #include "common.h"
 #include "lista.h"
-#include "msgs_struct.h"
 
 #include <pthread.h>
 #include <ctype.h>
@@ -13,8 +12,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define BUFSZ 500
 #define MAX_CLIENTES 255
+
 //Entreada tipo do protocolo e o porto
 
 void usage(int argc, char **argv) {
@@ -50,12 +49,12 @@ int addCliente(struct client_data *cdata ){
     for(i=0; i < MAX_CLIENTES; i++){
         if(Clientes[i] == NULL){
             Clientes[i] = cdata;
-            printf("i = %d\n", i);
+            //printf("i = %d\n", i);
             break;
         }
     }
     pthread_mutex_unlock(&clients_mutex);
-    printf("i = %d\n",i);
+    //printf("i = %d\n",i);
     return i;
 }
 
@@ -85,36 +84,6 @@ void removeSinal(char *buf,char *dest, int tam){
   }
 }
 
-void inscrever (struct client_data *cliente, char* dest,char *buf, int tam){
-  char chave [tam];
-  removeSinal(buf,chave,tam);
-  //Verifico se já está 
-  //Se sim mandar msg
-  if(BuscaItem(cliente->tags,chave)){
-     strcpy(dest,"already subscribed ");
-  }
-  //Se não adiciono na lista
-  else{
-   InsereFinal(&(cliente->tags),chave);
-   strcpy(dest,"subscribed "); 
-  }
-}
-
-void desinscrever(struct client_data *cliente ,char* dest,char *buf, int tam){
-    char chave [tam];
-    removeSinal(buf,chave,tam);
-    //procura se tá inscrito
-    //se tá remove
-    if(BuscaItem(cliente->tags,chave)){
-     RemoveItem(&(cliente->tags),chave);
-     strcpy(dest,"unsubscribed ");
-    }
-    //se não tem que mandar uma msg
-    else{
-       strcpy(dest,"not subscribed "); 
-    }
-}
-
 int isInvalido(struct client_data *cliente ,char *buf, int tam){
     int i=0;
     while(buf[i]!='\0'){
@@ -133,41 +102,6 @@ int isValido(char c){
     return 1;
 }
 
-int hashtag(char **p, char buf[], int tam){
-    char *q;
-
-    //se o caracter em p for igual a null ou '\0'
-    if (*p == NULL || **p == '\0'){
-        return 0;
-    }
-
-    q = strchr(*p, '#');//Procura a primeira ocorrencia do caracter na string
-    //Remove coisas tipo: ######
-    while (q && isValido(q[1]) == 0) {
-        q = strchr(q + 1, '#');
-    }
-
-    if (q) {
-        size_t n = 0;
-
-        q++;                    // skip hash sign
-
-        //Preenche buf com a tag
-        while (n + 1 < tam && isValido(*q)) {
-            buf[n++] = *q++;
-        }
-
-        if (tam){
-            buf[n] = '\0';
-        } // terminate buffer
-        *p = q;                 // remember position
-
-        return 1;               // hashtag found
-    }
-
-    return 0;                   // nothing found
-}
-
 
 int isKill(struct client_data *cliente ,char *buf, int tam){
     if(strcmp(buf,"##kill\n")==0){
@@ -177,92 +111,42 @@ int isKill(struct client_data *cliente ,char *buf, int tam){
 }
 
 
+void processa_entrada(struct client_data *cliente, char* buf, int cid, char* dest){
+    if(isInvalido(cliente,buf,sizeof(buf))){
+        strcpy(dest,"Invalid caracter");
+    }
+    if(buf[0] == '1'){
+        printf("Mensagem recebida: Hello\n");
+        determina_etapa(2, dest);
+        return ;
+    }
+    if(buf[0] == '3'){
+        printf("Mensagem recebida: info file\n");
+        determina_etapa(4, dest);
+        return ;
+    }
+    if(buf[0] == '6'){
+        printf("Mensagem recebida: file\n");
+        determina_etapa(7, dest);
+        return ;
+    }
+    if(buf[0] == '5'){
+        printf("Mensagem recebida: FIM\n");
+        strcpy(dest,"fim");
+        return ;
+    }
+    strcpy(dest,"nada");
+}
+
+
+
+//Funcoes de rede
+
 //Retorna 1 se sucesso e 0 caso contrario
 int send_msg(char *output, struct client_data *cdata){
     int count = send(cdata->csock, output, strlen(output) + 1, 0);
     return count == (strlen(output) + 1);
 }
-
-void publish(lista tags, char *msg, int cid){
-    printf("Publish\n");
-    pthread_mutex_lock(&clients_mutex);
-    int i = 0;
-    //Percorre clientes
-    for(i=0; i < MAX_CLIENTES; i++){
-        if(Clientes[i] != NULL){
-            printf("Visitando cliente %d de id %d\n", i, Clientes[i]->id);
-            ImprimeLista(Clientes[i]->tags);
-
-            //CLiente que enviou a mensagem nao deve receber
-            if(Clientes[i]->id == cid){
-                printf("Lista do cliente que enviou\n");
-                ImprimeLista(Clientes[i]->tags);
-                continue;
-            }
-            else{
-                apontador aux;
-                aux = tags.primeiro;
-                while(aux->prox != NULL){
-                    aux = aux->prox;
-                    //Checa se esse cliente tem alguma das tags
-                    if(BuscaItem(Clientes[i]->tags, aux->data)){
-                        send_msg(msg, Clientes[i]);
-                        printf("Achou a tag %s\n", aux->data);
-                        break;
-                    }
-                }
-            }   
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-
-char * confirmaInscricao(struct client_data *cliente, char* buf, int cid){
-    lista tags;
-    char item[BUFSZ];
-    CriaListaVazia(&tags);
-    printf("ConfirmaInscricao\n");
-    printf("Mensagem enviada = %s", buf);
-
-    if(isInvalido(cliente,buf,sizeof(buf))){
-        char dest[BUFSZ];
-        return strcpy(dest,"Invalid caracter");
-    }
-   
-    if(isKill(cliente,buf,sizeof(buf))){
-        char dest[BUFSZ];
-        return strcpy(dest,"kill");
-    }
-
-    if(buf[0] == '+'){
-        char dest[BUFSZ];
-        inscrever(cliente,dest,buf,sizeof(buf));
-        return strcat(dest,buf);
-    }
-    
-    if(buf[0] == '-'){
-        char dest[BUFSZ];
-        desinscrever(cliente,dest,buf,sizeof(buf));
-        return strcat(dest,buf);
-    }
-    char *search_str = (char*)malloc(BUFSZ*sizeof(char));
-    strcpy(search_str, buf);
-    
-    while(hashtag(&search_str,item,BUFSZ)){
-        if(strchr(item,'#')==NULL){
-             InsereFinal(&tags,item);
-        }
-    }
-    publish(tags, buf, cid);
-    DesalocaLista(&tags);
-    //mensagem pra enviar
-    //ImprimeLista(tags);
-    return "tag enviada";
-}
-
-
-//Funcoes de rede
 
 void * client_thread(void *data) {
     struct client_data *cdata = (struct client_data *)data;
@@ -276,25 +160,31 @@ void * client_thread(void *data) {
     printf("[log] connection from %s\n", caddrstr);
 
     char buf[BUFSZ];
+    char dest[BUFSZ];
     memset(buf, 0, BUFSZ);
     size_t count;
     
     while(1){
         memset(buf, 0, BUFSZ);
         count = recv(cdata->csock, buf, BUFSZ - 1, 0);
+        //printf("%s\n",buf);
         if(count > 0){
             //publish or command (+, - , ##kill ...)
-            char * output = confirmaInscricao(cdata,buf, cid);
-            printf("Output = -%s-\n", output);
-            if(strcmp(output,"Invalid caracter")==0) break;
-            if(strcmp(output,"tag enviada")==0){
+            processa_entrada(cdata,buf, cid, dest);
+            //printf("Output = -%s-\n", output);
+            if(strcmp(dest,"Invalid caracter")==0) break;
+            /*if(strcmp(output,"tag enviada")==0){
                 continue;
-            }
-            if(strcmp(output,"kill")==0){
+            }*/
+            if(strcmp(dest,"fim")==0){
+                printf("Fim\n");
                 exit(1);
             }
-            count = send(cdata->csock, output, strlen(output) + 1, 0);
-            if(count != strlen(output) + 1) break;
+            if(strcmp(dest,"nada")==0){
+                logexit("Mensagens");
+            }
+            count = send(cdata->csock, dest, strlen(dest) + 1, 0);
+            if(count != strlen(dest) + 1) break;
         }
         else break;
 
@@ -305,11 +195,13 @@ void * client_thread(void *data) {
     pthread_exit(EXIT_SUCCESS);
 }
 
+
 int main(int argc, char **argv) {
 
     if (argc < 2) {
         usage(argc, argv);
     }
+    
     inicializaClientes();
 
     struct sockaddr_storage storage;
