@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <ctype.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -10,6 +10,14 @@
 #include <pthread.h>
 
 #include "common.h"
+#include "mensagens.h"
+
+//Variáveis globais
+// Socket
+int s = 0;
+unsigned port = 0;
+//Exit flag
+int flag = 0;
 
 //Entradas Servidor e o porto
 void usage(int argc, char **argv) {
@@ -18,60 +26,111 @@ void usage(int argc, char **argv) {
 	exit(EXIT_FAILURE);
 }
 
-
-// Socket
-int s = 0;
-//Exit flag
-int flag = 0;
-
-
-void send_msg() {
-	//Mensagem HELLO
-	char buffer[BUFSZ] = {};
-	determina_etapa(1,0, buffer);
-	send(s, buffer, strlen(buffer), 0);
-	memset(buffer, 0, BUFSZ);
-  	/*while(1) {
-  		fflush(stdout);
-    	fgets(buffer, BUFSZ, stdin);
-      	send(s, buffer, strlen(buffer), 0);
-		memset(buffer, 0, BUFSZ);
- 	}*/
+void is_nome_val(char nomeArquivo[], int tam){
+	int i=0, count=0,num=0;
+	if(tam > 15){
+		logexit("Nome não permitido");
+	}
+	//Percorre a string contando o numero de '.'
+	char * pos = strchr(nomeArquivo,'.');
+	if(pos == NULL){
+		logexit("Nome não permitido");
+	}
+	for(i = pos-nomeArquivo;i<tam;i++){
+		if(nomeArquivo[i]==' '){
+			logexit("Nome não permitido");
+		}
+		if(nomeArquivo[i]=='.'){
+			count ++;
+		}
+		else if(isalnum(nomeArquivo[i])){
+			num ++;
+		}
+	}
+	if(count != 1 || num != 3){
+		logexit("Nome não permitido");
+	}
 }
 
-void recv_msg() {
-	char buffer[BUFSZ] = {};
+long get_tam_arquivo(char nomeArquivo[], int tam){
+	FILE *arquivo = fopen(nomeArquivo, "r");
+	if (arquivo != NULL) {
+		fseek(arquivo, 0, SEEK_END);
+		long posicao = ftell(arquivo);
+		fclose(arquivo);
+		return posicao;
+	}
+	else{
+		logexit("Arquivo inexistente");
+		return -1;
+	}
+}
+
+void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
+
+	//Cria a mensagem Hello
+	if(msg_id == 0){//Talvez tenha que trocar o valor de comparação
+		mini_msg sms;
+		sms.msg_id = 1;
+		send(s, &sms, sizeof(sms), 0);
+		printf("Mensagem enviada: Hello\n");
+	}
+
+	//Cria a mensagem Info file
+	if(msg_id == 2){
+		//Recebe a mensagem Connection
+		printf("Mensagem recebida: Connection\n");
+
+		connection_msg conex;
+		int receive = recv(s, &conex, sizeof(conex),0);
+		printf("ID msg %u\nUDP port %u\nBytes lidos %d \n",conex.msg_id,conex.udp_port,receive);
+		port = ntohs(conex.udp_port);
+		printf("PORTA: %u\n", port);
+
+		//Cria a mensagem Info File
+		info_file_msg info;
+		info.msg_id = 3;
+		strcpy(info.nome_arquivo,nome);
+		info.tamanho_arquivo = get_tam_arquivo(nome,tam);
+		send(s, &info, sizeof(info), 0); 
+		printf("Mensagem enviada: Info File\n");
+	}
+
+	//Cria a mensagem Dados
+	if(msg_id == 4){
+		printf("Mensagem recebida: Ok\n");
+		mini_msg sms;
+        recv(s, &sms, sizeof(sms), 0);
+        printf("Mensagem recebida: Hello\n");
+
+		//Cria a mensagem de dados
+		//TODO
+
+	}
+}
+
+void send_msg() {
+	char aux [] = "vazio";
+	cria_mensagem(0,aux,strlen(aux));
+}
+
+void recv_msg(char nome[]) {
+	mini_msg sms;
   	while (1) {
-		int receive = recv(s, buffer, BUFSZ, 0);
-    	if (receive > 0) {
-      		//printf("%s", buffer);
-      		if(buffer[0]=='2'){
-      			 printf("Mensagem recebida: Connection\n");
-      			 determina_etapa(3,0, buffer);
-      			 send(s, buffer, strlen(buffer), 0);
-				 memset(buffer, 0, BUFSZ);
-      		}
-      		if(buffer[0]=='4'){
-      			 printf("Mensagem recebida: ok\n");
-      			 determina_etapa(6, 0,buffer);
-      			 send(s, buffer, strlen(buffer), 0);
-				 memset(buffer, 0, BUFSZ);
-      		}
-      		if(buffer[0]=='7'){
-      			 printf("Mensagem recebida: Ack\n");
-      			 determina_etapa(5, 0, buffer);
-      			 send(s, buffer, strlen(buffer), 0);
-				 memset(buffer, 0, BUFSZ);
-      		}
-      		fflush(stdout);
-    	} 
+		memset(&sms, 0, sizeof(sms));
+		int receive = recv(s, &sms, sizeof(sms), MSG_PEEK);
+        printf("Mini msg %u Bytes lidos %d \n",sms.msg_id, receive);
+        if(receive > 0){
+			cria_mensagem(sms.msg_id,nome,strlen(nome));
+			fflush(stdout);
+        }
     	else{
 			break;
-    	} 
-		memset(buffer, 0, sizeof(buffer));
+    	}
+    	//getchar();
   	}
   	//printf("Saiu\n");
-  	flag = 1;
+  	flag=1;
 }
 
 
@@ -79,6 +138,8 @@ int main(int argc, char **argv){
 	if (argc < 4) {
 		usage(argc, argv);
 	}
+
+	is_nome_val(argv[3], strlen(argv[3]));
 	
 	//Estabelece conexão com o TCP
 	struct sockaddr_storage storage;
@@ -103,7 +164,7 @@ int main(int argc, char **argv){
 	}
 
 	pthread_t recv_msg_thread;
-  	if(pthread_create(&recv_msg_thread, NULL, (void *) recv_msg, NULL) != 0){
+  	if(pthread_create(&recv_msg_thread, NULL, (void *) recv_msg, argv[3]) != 0){
 		printf("ERROR: pthread receive\n");
 		return EXIT_FAILURE;
 	}

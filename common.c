@@ -6,10 +6,7 @@
 #include <arpa/inet.h>
 
 #include "common.h"
-
-void tostring(hello_msg sms, char buffer[], int tam){
-    sprintf(buffer,"%d %u",sms.msg_id, sms.udp_port);
-}
+#include "mensagens.h"//Necessário?
 
 void logexit(const char *msg) {
 	perror(msg);
@@ -103,17 +100,4 @@ int server_sockaddr_init(const char *proto, const char *portstr,
     } else {
         return -1;
     }
-}
-
-void determina_etapa(int num, unsigned porta, char buffer[]){
-    hello_msg mensagem;
-
-    mensagem.msg_id = num;
-    if(porta > 0){
-        mensagem.udp_port = porta;
-    }
-
-    tostring(mensagem, buffer, BUFSZ);
-    printf("Mensagem enviada: %s\n", buffer);
-
 }

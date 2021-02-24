@@ -1,5 +1,6 @@
 #include "common.h"
 #include "lista.h"
+#include "mensagens.h"
 
 #include <pthread.h>
 #include <ctype.h>
@@ -14,8 +15,7 @@
 
 #define MAX_CLIENTES 255
 
-//Entreada tipo do protocolo e o porto
-
+//Entrada tipo do protocolo e o porto
 void usage(int argc, char **argv) {
     printf("usage: %s <server port>\n", argv[0]);
     printf("example: %s 51511\n", argv[0]);
@@ -23,7 +23,6 @@ void usage(int argc, char **argv) {
 }
 
 //Dados do cliente
-
 struct client_data {
     int csock;
     struct sockaddr_storage storage;
@@ -71,7 +70,6 @@ void removeCliente(int cid){
     pthread_mutex_unlock(&clients_mutex);
 }
 
-
 //Funcoes de parsing
 void removeSinal(char *buf,char *dest, int tam){
   for(int i=0; i < tam; i++){
@@ -100,45 +98,42 @@ int isValido(char c){
     return 1;
 }
 
-void processa_entrada(struct client_data *cliente, char* buf, int cid, char* dest, struct sockaddr_in6 server_addr_UDP){
-    unsigned porta = 0;
-    if(isInvalido(cliente,buf,sizeof(buf))){
-        strcpy(dest,"Invalid caracter");
-    }
-    if(buf[0] == '1'){
+void cria_mensagem(unsigned short int msg_id,struct sockaddr_in6 server_addr_UDP, struct client_data *cdata){
+
+    if(msg_id == 1){
+        //Recebe a mensagem Hello
+        mini_msg sms;
+        recv(cdata->csock, &sms, sizeof(sms), 0);
         printf("Mensagem recebida: Hello\n");
-        porta = ntohl(server_addr_UDP.sin6_port);
-        determina_etapa(2,porta,dest);
-        return ;
+
+        //Cria a mensagem Connection
+        connection_msg conex;
+        conex.msg_id = 2;
+        conex.udp_port = server_addr_UDP.sin6_port;
+        printf("PORTA: %u\n", conex.udp_port);
+        send(cdata->csock, &conex, sizeof(conex), 0);
+        printf("Mensagem enviada: Connection\n");
     }
-    if(buf[0] == '3'){
-        printf("Mensagem recebida: info file\n");
-        determina_etapa(4, porta, dest);
-        return ;
+
+    if(msg_id == 3){
+        //Recebe a mensagem Info File
+        printf("Mensagem recebida: Info File\n");
+
+        info_file_msg info;
+        int receive = recv(cdata->csock, &info, sizeof(info), 0);
+        printf("ID msg %u\nNome do arquivo %s\nTamanho do arquivo %u\n Bytes lidos %d \n",
+            info.msg_id,info.nome_arquivo,info.tamanho_arquivo,receive);
+
+        //Cria mensagem Ok
+        mini_msg sms;
+        sms.msg_id = 4;
+        send(cdata->csock, &sms, sizeof(sms), 0);
+        printf("Mensagem enviada: OK\n");
     }
-    if(buf[0] == '6'){
-        printf("Mensagem recebida: file\n");
-        determina_etapa(7, porta, dest);
-        return ;
-    }
-    if(buf[0] == '5'){
-        printf("Mensagem recebida: FIM\n");
-        strcpy(dest,"fim");
-        return ;
-    }
-    strcpy(dest,"nada");
+
 }
-
-
 
 //Funcoes de rede
-
-//Retorna 1 se sucesso e 0 caso contrario
-int send_msg(char *output, struct client_data *cdata){
-    int count = send(cdata->csock, output, strlen(output) + 1, 0);
-    return count == (strlen(output) + 1);
-}
-
 
 /*Esta função é chamada toda vez que criamos uma nova thread para um cliente, ou seja,
 novo cliente implica em nova thread. O que por sua vez que o cliente é acionado a um vetor de clientes.
@@ -155,12 +150,11 @@ void * client_thread(void *data) {
     addrtostr(caddr, caddrstr, BUFSZ);
     printf("[log] connection from %s\n", caddrstr);
 
-    char buf[BUFSZ];
-    char dest[BUFSZ];
-    memset(buf, 0, BUFSZ);
+    mini_msg sms;
+    memset(&sms, 0, sizeof(sms));
     size_t count;
 
-    /* CRIA UDP*/
+    //CRIA UDP
     //Cria socket UDP
     int udp_socket;
     struct sockaddr_in6 server_addr_UDP;
@@ -172,12 +166,13 @@ void * client_thread(void *data) {
 
     //Seta porto e IP do UDP
     server_addr_UDP.sin6_family = AF_INET6;
+    //TODO escolher e alocar um porto diferente por cliente
     server_addr_UDP.sin6_port = htons(2000);
+    printf("Porta inicializada: %u\n",ntohs(server_addr_UDP.sin6_port));
     //printf("Funfou\n");
     
     //UDP bind
     if(bind(udp_socket, (struct sockaddr*)&server_addr_UDP, sizeof(server_addr_UDP)) < 0){
-        //printf("Couldn't bind to the port\n");
         logexit("bind UDP");
     }
     //printf("Done with binding\n");
@@ -186,10 +181,19 @@ void * client_thread(void *data) {
     
     
     while(1){
-        memset(buf, 0, BUFSZ);
-        count = recv(cdata->csock, buf, BUFSZ - 1, 0);
-        //printf("%s\n",buf);
+        memset(&sms, 0, sizeof(sms));
+        //printf("Mini msg %u Bytes lidos %ld \n",sms.msg_id, count);
+        //getchar();
+        count = recv(cdata->csock, &sms, sizeof(sms), MSG_PEEK);
+        printf("Mini msg %u Bytes lidos %ld \n",sms.msg_id, count);
         if(count > 0){
+            printf("ENtra\n");
+            cria_mensagem(sms.msg_id, server_addr_UDP, cdata);
+            printf("Sai\n");
+            //getchar();
+            //fflush(stdout);
+        }
+        /*if(count > 0){
             processa_entrada(cdata,buf, cid, dest, server_addr_UDP);
             if(strcmp(dest,"Invalid caracter")==0) break;
             if(strcmp(dest,"fim")==0){
@@ -201,9 +205,10 @@ void * client_thread(void *data) {
             }
             count = send(cdata->csock, dest, strlen(dest) + 1, 0);
             if(count != strlen(dest) + 1) break;
+        }*/
+        else {
+            break;
         }
-        else break;
-
     }
     removeCliente(cid);
     free(cdata);
