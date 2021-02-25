@@ -17,7 +17,6 @@
 // Socket
 int s = 0, sock=0;
 struct sockaddr_in6 server_addr,client_addr;
-unsigned port = 0;
 udp_file_msg *pacote;
 //Exit flag
 int flag = 0;
@@ -137,8 +136,8 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		connection_msg conex;
 		int receive = recv(s, &conex, sizeof(conex),0);
 		printf("ID msg %u\nUDP port %u\nBytes lidos %d \n",conex.msg_id,conex.udp_port,receive);
-		port = ntohs(conex.udp_port);
-		printf("PORTA: %u\n", port);
+		server_addr.sin6_port = ntohs(conex.udp_port);
+		printf("PORTA: %u\n", server_addr.sin6_port);
 
 		//Cria a mensagem Info File
 		info_file_msg info;
