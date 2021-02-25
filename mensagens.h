@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "common.h"
 
 //Usada pelo Hello, OK e Fim
 typedef struct {
@@ -27,7 +28,7 @@ typedef struct {
     unsigned short int msg_id;
     unsigned num_sequencia;
     unsigned short int payload_size;
-    //TODO payload arquivo
+    char payload [BUFSZ];
 } udp_file_msg;
 
 
