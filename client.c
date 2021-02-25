@@ -15,7 +15,8 @@
 
 //Variáveis globais
 // Socket
-int s = 0;
+int s = 0, sock=0;
+struct sockaddr_in6 server_addr,client_addr;
 unsigned port = 0;
 udp_file_msg *pacote;
 //Exit flag
@@ -93,7 +94,7 @@ void segmenta_arquivo(char nome[],int len){
 	//Abre o arquivo
 	FILE *arquivo = fopen(nome,"rb");
 	if(arquivo == NULL ){
-		printf("Erro na abertura do arquivo\n");
+		logexit("Erro na abertura do arquivo");
 	}
 
 	//Coloco o ponteiro no inicio do arquivo:
@@ -111,9 +112,9 @@ void segmenta_arquivo(char nome[],int len){
 	}
 
 	//Imprime
-	for(i=0;i<num_pacotes;i++){
+	/*for(i=0;i<num_pacotes;i++){
 		imprime_pacote_UDP(pacote[i]);	
-	}
+	}*/
 
 	fclose(arquivo);
 }
@@ -157,7 +158,7 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 
 		//Cria a mensagem de dados
         segmenta_arquivo(nome,tam);
-        
+
 	}
 }
 
@@ -203,6 +204,17 @@ int main(int argc, char **argv){
 	if (s == -1) {
 		logexit("socket");
 	}
+
+	//Criação socket UDP
+	sock = socket(PF_INET6,SOCK_DGRAM,0);
+	if(sock < 0){
+		logexit("socket UDP");
+	}
+	//Inicializa dados do servidor
+	memset(&server_addr,0,sizeof(server_addr));
+	server_addr.sin6_family = AF_INET6;
+	inet_pton(AF_INET6,argv[1],&server_addr.sin6_addr);
+
 	struct sockaddr *addr = (struct sockaddr *)(&storage);
 	if (0 != connect(s, addr, sizeof(storage))) {
 		logexit("connect");
