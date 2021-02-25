@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <math.h>
 
 #include "common.h"
 #include "mensagens.h"
@@ -16,6 +17,7 @@
 // Socket
 int s = 0;
 unsigned port = 0;
+udp_file_msg *pacote;
 //Exit flag
 int flag = 0;
 
@@ -66,6 +68,56 @@ long get_tam_arquivo(char nomeArquivo[], int tam){
 	}
 }
 
+void imprime_pacote_UDP(udp_file_msg pacote){
+	printf("Msg id: %u\n",pacote.msg_id);
+	printf("Pacote id: %u\n",pacote.num_sequencia);
+	printf("Payload size: %u\n",pacote.payload_size);
+	printf("payload: %s\n",pacote.payload);
+	printf("\n\n");
+}
+
+void segmenta_arquivo(char nome[],int len){
+	int i,num_pacotes = 0;
+	float aux;
+
+	long tam = get_tam_arquivo(nome,len);
+
+	//Vê o número de pacotes
+	aux = (float)tam/(float)BUFSZ;
+	num_pacotes = ceil(aux);
+
+	pacote = (udp_file_msg*) calloc(num_pacotes,sizeof(udp_file_msg));
+
+	printf("num_pacotes: %d\n", num_pacotes);
+
+	//Abre o arquivo
+	FILE *arquivo = fopen(nome,"rb");
+	if(arquivo == NULL ){
+		printf("Erro na abertura do arquivo\n");
+	}
+
+	//Coloco o ponteiro no inicio do arquivo:
+	fseek(arquivo,0,SEEK_SET);
+
+	//Lê 1000 bytes
+	for(i=0;i<num_pacotes;i++){
+		pacote[i].msg_id = 6;
+		pacote[i].num_sequencia = i;
+		memset(&pacote[i].payload,0,sizeof(pacote[i].payload));
+		fread(pacote[i].payload,sizeof(pacote[i].payload),1,arquivo);
+		//printf("payload: %s\n",pacote.payload[i]);
+		pacote[i].payload_size = strlen(pacote[i].payload);
+		//printf("tamanho: %ld\n",strlen(pacote.payload[i]));
+	}
+
+	//Imprime
+	for(i=0;i<num_pacotes;i++){
+		imprime_pacote_UDP(pacote[i]);	
+	}
+
+	fclose(arquivo);
+}
+
 void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 
 	//Cria a mensagem Hello
@@ -104,8 +156,8 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
         printf("Mensagem recebida: Hello\n");
 
 		//Cria a mensagem de dados
-		//TODO
-
+        segmenta_arquivo(nome,tam);
+        
 	}
 }
 
@@ -175,7 +227,10 @@ int main(int argc, char **argv){
 		}
 	}
 
+	//Finalizações
 	close(s);
+	free(pacote);
+
 
 	return EXIT_SUCCESS;
 }
