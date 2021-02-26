@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 
-#define BUFSZ 500
+#define BUFSZ 1000
 
 void logexit(const char *msg);
 

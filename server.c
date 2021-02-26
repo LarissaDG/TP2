@@ -121,6 +121,7 @@ void imprime_pacote_UDP(udp_file_msg pacote){
 
 void UDP_connection(udp_data valor, info_file_msg info,struct client_data *cdata){
     int expected = 0;
+    ack_msg ack;
     udp_file_msg dados;
     float aux;
 
@@ -146,25 +147,26 @@ void UDP_connection(udp_data valor, info_file_msg info,struct client_data *cdata
         }
         else{//Manda o ack
             if(dados.num_sequencia == expected){
-                ack_msg ack;
                 ack.msg_id = 7;
                 ack.num_sequencia = dados.num_sequencia;
 
                 if(send(cdata->csock, &ack, sizeof(ack), 0) < 0){
                     logexit("Envio ack falhou");
                 }
+                printf("Manda ack %d\n", ack.num_sequencia);
                 expected ++;
             }
-            imprime_pacote_UDP(dados);
+            //imprime_pacote_UDP(dados);
             pacote[dados.num_sequencia] = dados;
             printf("IMPRIME PACOTE RECEBIDO\n");
             imprime_pacote_UDP(pacote[dados.num_sequencia]); 
-            printf("Pacote %d recevido de %d \n",dados.num_sequencia, num_pacotes-1);
+            printf("Pacote %d recevido de %d \n",dados.num_sequencia+1, num_pacotes);
         }
         //getchar();
         if(count <= 0){
            break;
         }
+
         printf("To preso\n");
     }
     printf("Sai\n");

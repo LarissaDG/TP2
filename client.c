@@ -94,10 +94,12 @@ void segmenta_arquivo(char nome[],int len){
 	float aux;
 
 	long tam = get_tam_arquivo(nome,len);
-
+	printf("**tamanho_arquivo** %ld\n", tam);
 	//Vê o número de pacotes
 	aux = (float)tam/(float)BUFSZ;
+	printf("**aux %f = %ld/%d ** \n", aux,tam,BUFSZ);
 	num_pacotes = ceil(aux);
+	printf("**Numero de pacotes %d **\n", num_pacotes);
 
 	pacote = (udp_file_msg*) calloc(num_pacotes,sizeof(udp_file_msg));
 
@@ -156,6 +158,7 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		info.msg_id = 3;
 		strcpy(info.nome_arquivo,nome);
 		info.tamanho_arquivo = get_tam_arquivo(nome,tam);
+		printf("**tamanho_arquivo** %d\n", info.tamanho_arquivo);
 		send(s, &info, sizeof(info), 0); 
 		//printf("Mensagem enviada: Info File\n");
 	}
@@ -184,7 +187,9 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
         //Janela deslizante go back N
         while(1){
         	//Espera a disponibilidade do pacote
+        	printf("1\n");
         	if(ultimo < num_pacotes){//TODO ver se essa ehuma boa condição
+        		//printf("%d < %d \n",ultimo, num_pacotes );
         		if(ultimo - primeiro >= WINDOW){
         			//Nada
         		}
@@ -192,28 +197,39 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		        	(struct sockaddr*)&server_addr,sizeof(server_addr))) < 0){
 		        	logexit("Envio UDP falhou");
 		        }
-		        printf("Mensagem enviada: Dados\n");
+		        //printf("Mensagem enviada: Dados\n");
 		        printf("\n\n ----------PACOTE ---------\n");
 		        imprime_pacote_UDP(pacote[ultimo]);
 		        printf("-------------------\n");
 
-		        printf("Pacote %d de %d \n",ultimo, num_pacotes-1);
+		        printf("Pacote %d de %d \n",ultimo+1, num_pacotes);
 		        ctrl[ultimo].tempo = clock();
 		        ultimo ++;
         	}
+        	printf("2\n");
+        	//printf("Valor esperado: %d \n",expected);
         	if(recv(s, &ack, sizeof(ack), MSG_PEEK)){
+        		//printf("2.1\n");
+        		//printf("Valor esperado: %d \n",expected);
 		        if((count = recv(s, &ack, sizeof(ack), 0)) < 0){
 		            logexit("receive ack");
 		        } 
-		        printf("Recebi ack: %u %u\n", ack.msg_id,ack.num_sequencia);
+		       // printf("Recebi ack: %u %u\n", ack.msg_id,ack.num_sequencia);
+		       // printf("2.2\n");
+		        //printf("Valor esperado: %d \n",expected);
 		        if(ack.num_sequencia == expected){
+		        	//printf("2.3\n");
+		        	printf("Valor esperado: %d \n",expected);
 		        	ctrl[ack.num_sequencia].ack = ack;
 		        	ctrl[ack.num_sequencia].recebido = 1;
 		        	ctrl[ack.num_sequencia].tempo = clock() - ctrl[ack.num_sequencia].tempo;
 		        	primeiro ++;
 		        	expected ++; 
 		        }
+		        //printf("2.4\n");
+		        //printf("Valor esperado: %d \n",expected);
 	        }
+	        printf("3\n");
 	        //Se o tempo acabou manda todos os pacotes que não foram recebidos 
 	        if(ctrl[primeiro].tempo >= TIMEOUT){
 	        	aux = primeiro;
@@ -228,8 +244,11 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 			        ctrl[aux].tempo = clock();
 			        aux++;	
 	        	}
+	        	//printf("Sai do while\n");
 	        }
+	        //printf("Sai if\n");
     	}
+    	printf("Sai do BIG while\n");
 	}
 }
 
@@ -246,6 +265,7 @@ void recv_msg(char nome[]) {
         //printf("Mini msg %u Bytes lidos %d \n",sms.msg_id, receive);
         if(receive > 0){
 			cria_mensagem(sms.msg_id,nome,strlen(nome));
+			printf("Depois do cria msg\n");
 			fflush(stdout);
         }
     	else{
