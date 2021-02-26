@@ -69,12 +69,13 @@ long get_tam_arquivo(char nomeArquivo[], int tam){
 }
 
 void imprime_pacote_UDP(udp_file_msg pacote){
-	printf("Msg id: %u\n",pacote.msg_id);
-	printf("Pacote id: %u\n",pacote.num_sequencia);
-	printf("Payload size: %u\n",pacote.payload_size);
-	printf("payload: %s\n",pacote.payload);
-	printf("\n\n");
+    printf("Msg id: %u\n",pacote.msg_id);
+    printf("Pacote id: %u\n",pacote.num_sequencia);
+    printf("Payload size: %u\n",pacote.payload_size);
+    printf("payload: %s\n",pacote.payload);
+    printf("\n\n");
 }
+
 
 void segmenta_arquivo(char nome[],int len){
 	int i,num_pacotes = 0;
@@ -136,8 +137,8 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		connection_msg conex;
 		int receive = recv(s, &conex, sizeof(conex),0);
 		printf("ID msg %u\nUDP port %u\nBytes lidos %d \n",conex.msg_id,conex.udp_port,receive);
-		server_addr.sin6_port = ntohs(conex.udp_port);
-		printf("PORTA: %u\n", server_addr.sin6_port);
+		server_addr.sin6_port = conex.udp_port;
+		printf("PORTA: %u\n", ntohs(server_addr.sin6_port));
 
 		//Cria a mensagem Info File
 		info_file_msg info;
@@ -150,13 +151,24 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 
 	//Cria a mensagem Dados
 	if(msg_id == 4){
+		int i = 0;
 		printf("Mensagem recebida: Ok\n");
 		mini_msg sms;
         recv(s, &sms, sizeof(sms), 0);
-        printf("Mensagem recebida: Hello\n");
 
 		//Cria a mensagem de dados
         segmenta_arquivo(nome,tam);
+        //Manda via UDP para o servidor - No momento só manda um pacote
+        imprime_pacote_UDP(pacote[i]); 
+        if(sendto(sock,&pacote[i],sizeof(pacote[i]),0,
+        	(struct sockaddr*)&server_addr,sizeof(server_addr)) < 0){
+        	logexit("Envio UDP falhou");
+        }
+
+        printf("Mensagem enviada: Dados\n");
+        imprime_pacote_UDP(pacote[i]); 
+
+
 
 	}
 }
@@ -205,13 +217,15 @@ int main(int argc, char **argv){
 	}
 
 	//Criação socket UDP
-	sock = socket(PF_INET6,SOCK_DGRAM,0);
-	if(sock < 0){
+	if((sock = socket(AF_INET6,SOCK_DGRAM,0)) < 0){
 		logexit("socket UDP");
 	}
+
 	//Inicializa dados do servidor
 	memset(&server_addr,0,sizeof(server_addr));
+	
 	server_addr.sin6_family = AF_INET6;
+	//server_addr.sin6_addr.s_addr = INADDR_ANY; 
 	inet_pton(AF_INET6,argv[1],&server_addr.sin6_addr);
 
 	struct sockaddr *addr = (struct sockaddr *)(&storage);
