@@ -141,31 +141,35 @@ void UDP_connection(udp_data valor, info_file_msg info,struct client_data *cdata
 
     // Receive client's message:
     while (1){
-        if((count = recvfrom(valor.udp_socket,&dados, sizeof(dados),0,(struct sockaddr*)
-            &valor.client_addr_UDP, &client_struct_length)) < 0){
-            logexit("receive UDP");
-        }
-        else{//Manda o ack
-            if(dados.num_sequencia == expected){
-                ack.msg_id = 7;
-                ack.num_sequencia = dados.num_sequencia;
+        count = 0;
+        printf("Inicio count = %ld\n", count);
+        count = recvfrom(valor.udp_socket,&dados, sizeof(dados),O_NONBLOCK,(struct sockaddr*)
+            &valor.client_addr_UDP, &client_struct_length);
 
-                if(send(cdata->csock, &ack, sizeof(ack), 0) < 0){
-                    logexit("Envio ack falhou");
+            if(count > 0){//Manda o ack
+                printf("PASS2\n");
+                if(dados.num_sequencia == expected){
+                    ack.msg_id = 7;
+                    ack.num_sequencia = dados.num_sequencia;
+
+                    if(send(cdata->csock, &ack, sizeof(ack), 0) < 0){
+                        logexit("Envio ack falhou");
+                    }
+                    printf("Manda ack %d\n", ack.num_sequencia);
+                    expected ++;
                 }
-                printf("Manda ack %d\n", ack.num_sequencia);
-                expected ++;
+                //imprime_pacote_UDP(dados);
+                pacote[dados.num_sequencia] = dados;
+                printf("IMPRIME PACOTE RECEBIDO\n");
+                imprime_pacote_UDP(pacote[dados.num_sequencia]); 
+                printf("Pacote %d recebido de %d \n",dados.num_sequencia+1, num_pacotes);
             }
-            //imprime_pacote_UDP(dados);
-            pacote[dados.num_sequencia] = dados;
-            printf("IMPRIME PACOTE RECEBIDO\n");
-            imprime_pacote_UDP(pacote[dados.num_sequencia]); 
-            printf("Pacote %d recevido de %d \n",dados.num_sequencia+1, num_pacotes);
-        }
+            else{
+                printf("BOBO\n");
+                break;
+            }
         //getchar();
-        if(count <= 0){
-           break;
-        }
+        printf("FIm count = %ld\n", count);
 
         printf("To preso\n");
     }

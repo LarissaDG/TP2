@@ -132,6 +132,19 @@ void segmenta_arquivo(char nome[],int len){
 	fclose(arquivo);
 }
 
+int checa_controle(controle *ctrl){
+	int i, count=0;
+	for(i=0;i<num_pacotes;i++){
+		if(ctrl[i].recebido == 1){
+			count++;
+		}
+	}
+	if(count == num_pacotes-1){
+		return 1;
+	}
+	return 0;
+}
+
 void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 
 	//Cria a mensagem Hello
@@ -189,7 +202,6 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
         	//Espera a disponibilidade do pacote
         	printf("1\n");
         	if(ultimo < num_pacotes){//TODO ver se essa ehuma boa condição
-        		//printf("%d < %d \n",ultimo, num_pacotes );
         		if(ultimo - primeiro >= WINDOW){
         			//Nada
         		}
@@ -197,7 +209,6 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		        	(struct sockaddr*)&server_addr,sizeof(server_addr))) < 0){
 		        	logexit("Envio UDP falhou");
 		        }
-		        //printf("Mensagem enviada: Dados\n");
 		        printf("\n\n ----------PACOTE ---------\n");
 		        imprime_pacote_UDP(pacote[ultimo]);
 		        printf("-------------------\n");
@@ -207,18 +218,12 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		        ultimo ++;
         	}
         	printf("2\n");
-        	//printf("Valor esperado: %d \n",expected);
         	if(recv(s, &ack, sizeof(ack), MSG_PEEK)){
-        		//printf("2.1\n");
-        		//printf("Valor esperado: %d \n",expected);
 		        if((count = recv(s, &ack, sizeof(ack), 0)) < 0){
 		            logexit("receive ack");
 		        } 
 		       // printf("Recebi ack: %u %u\n", ack.msg_id,ack.num_sequencia);
-		       // printf("2.2\n");
-		        //printf("Valor esperado: %d \n",expected);
 		        if(ack.num_sequencia == expected){
-		        	//printf("2.3\n");
 		        	printf("Valor esperado: %d \n",expected);
 		        	ctrl[ack.num_sequencia].ack = ack;
 		        	ctrl[ack.num_sequencia].recebido = 1;
@@ -226,10 +231,8 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		        	primeiro ++;
 		        	expected ++; 
 		        }
-		        //printf("2.4\n");
-		        //printf("Valor esperado: %d \n",expected);
 	        }
-	        printf("3\n");
+	        
 	        //Se o tempo acabou manda todos os pacotes que não foram recebidos 
 	        if(ctrl[primeiro].tempo >= TIMEOUT){
 	        	aux = primeiro;
@@ -244,11 +247,11 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 			        ctrl[aux].tempo = clock();
 			        aux++;	
 	        	}
-	        	//printf("Sai do while\n");
 	        }
-	        //printf("Sai if\n");
+	        if((ultimo == num_pacotes) && checa_controle(ctrl)){
+	        	return ;
+	        }
     	}
-    	printf("Sai do BIG while\n");
 	}
 }
 
