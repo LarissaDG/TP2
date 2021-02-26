@@ -119,8 +119,8 @@ void imprime_pacote_UDP(udp_file_msg pacote){
 }
 
 
-void UDP_connection(udp_data valor, info_file_msg info){
-
+void UDP_connection(udp_data valor, info_file_msg info,struct client_data *cdata){
+    int expected = 0;
     udp_file_msg dados;
     float aux;
 
@@ -132,37 +132,42 @@ void UDP_connection(udp_data valor, info_file_msg info){
 
     pacote = (udp_file_msg*) calloc(num_pacotes,sizeof(udp_file_msg));
 
-    printf("num_pacotes: %d\n", num_pacotes);
+    //printf("num_pacotes: %d\n", num_pacotes);
     
-    printf("Tam udp_file_msg %ld\n",sizeof(udp_file_msg));
+    //printf("Tam udp_file_msg %ld\n",sizeof(udp_file_msg));
     size_t count;
     socklen_t client_struct_length = sizeof(valor.client_addr_UDP);
 
     // Receive client's message:
-    //while (1){
+    while (1){
         if((count = recvfrom(valor.udp_socket,&dados, sizeof(dados),0,(struct sockaddr*)
             &valor.client_addr_UDP, &client_struct_length)) < 0){
             logexit("receive UDP");
         }
         else{//Manda o ack
-            ack_msg ack;
-            ack.msg_id = 7;
-            ack.num_sequencia = dados.num_sequencia;
+            if(dados.num_sequencia == expected){
+                ack_msg ack;
+                ack.msg_id = 7;
+                ack.num_sequencia = dados.num_sequencia;
 
-            if(sendto(valor.udp_socket,&ack,sizeof(ack),0,
-                (struct sockaddr*)&valor.client_addr_UDP,client_struct_length) < 0){
-                logexit("Envio ack falhou");
+                if(send(cdata->csock, &ack, sizeof(ack), 0) < 0){
+                    logexit("Envio ack falhou");
+                }
+                expected ++;
             }
+            imprime_pacote_UDP(dados);
+            pacote[dados.num_sequencia] = dados;
+            printf("IMPRIME PACOTE RECEBIDO\n");
+            imprime_pacote_UDP(pacote[dados.num_sequencia]); 
+            printf("Pacote %d recevido de %d \n",dados.num_sequencia, num_pacotes-1);
         }
-        imprime_pacote_UDP(dados);
-        pacote[dados.num_sequencia] = dados;
-        printf("IMPRIME PACOTE\n");
-        imprime_pacote_UDP(pacote[dados.num_sequencia]); 
         //getchar();
-        //if(count <= 0){
-        //   break;
-        //}
-    //}
+        if(count <= 0){
+           break;
+        }
+        printf("To preso\n");
+    }
+    printf("Sai\n");
 }
 
 void renomeia_arquivo(char* nome, char* aux){
@@ -184,7 +189,7 @@ void renomeia_arquivo(char* nome, char* aux){
     }
 
     aux[i] = '\0';
-    printf("Novo nome do arquivo %s\n", aux);
+    //printf("Novo nome do arquivo %s\n", aux);
 }
 
 void monta_arquivo(info_file_msg info){
@@ -199,6 +204,7 @@ void monta_arquivo(info_file_msg info){
         fwrite(pacote[i].payload,pacote[i].payload_size,1,arquivo);
     }
     fclose(arquivo);
+    printf(" Montou arquivo\n");
 }
 
 
@@ -208,36 +214,36 @@ void cria_mensagem(unsigned short int msg_id,struct sockaddr_in6 server_addr_UDP
         //Recebe a mensagem Hello
         mini_msg sms;
         recv(cdata->csock, &sms, sizeof(sms), 0);
-        printf("Mensagem recebida: Hello\n");
+        //printf("Mensagem recebida: Hello\n");
 
         //Cria a mensagem Connection
         connection_msg conex;
         conex.msg_id = 2;
         conex.udp_port = server_addr_UDP.sin6_port;
-        printf("PORTA: %u\n", conex.udp_port);
+        //printf("PORTA: %u\n", conex.udp_port);
         send(cdata->csock, &conex, sizeof(conex), 0);
-        printf("Mensagem enviada: Connection\n");
+        //printf("Mensagem enviada: Connection\n");
     }
 
     if(msg_id == 3){
         //Recebe a mensagem Info File
-        printf("Mensagem recebida: Info File\n");
+        //printf("Mensagem recebida: Info File\n");
 
         info_file_msg info;
-        int receive = recv(cdata->csock, &info, sizeof(info), 0);
-        printf("ID msg %u\nNome do arquivo %s\nTamanho do arquivo %u\n Bytes lidos %d \n",
-            info.msg_id,info.nome_arquivo,info.tamanho_arquivo,receive);
+        recv(cdata->csock, &info, sizeof(info), 0);
+        //printf("ID msg %u\nNome do arquivo %s\nTamanho do arquivo %u\n",
+        //    info.msg_id,info.nome_arquivo,info.tamanho_arquivo);
 
         //Cria mensagem Ok
         mini_msg sms;
         sms.msg_id = 4;
         send(cdata->csock, &sms, sizeof(sms), 0);
-        printf("Mensagem enviada: OK\n");
+        //printf("Mensagem enviada: OK\n");
         
 
         //Cria thread UDP
-        UDP_connection(valor,info);
-        printf("OIE\n");
+        UDP_connection(valor,info,cdata);
+        //printf("OIE\n");
         monta_arquivo(info);
     }
 }

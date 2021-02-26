@@ -15,11 +15,21 @@
 #include "common.h"
 #include "mensagens.h"
 
+#define TIMEOUT 2*CLOCKS_PER_SEC
+#define WINDOW 4
+
+typedef struct{
+	ack_msg ack;
+	clock_t tempo;
+	int recebido;
+}controle;
+
 //Variáveis globais
 // Socket
 int s = 0, sock=0;
 struct sockaddr_in6 server_addr,client_addr;
 udp_file_msg *pacote;
+int num_pacotes=0;
 //Exit flag
 int flag = 0;
 
@@ -80,7 +90,7 @@ void imprime_pacote_UDP(udp_file_msg pacote){
 
 
 void segmenta_arquivo(char nome[],int len){
-	int i,num_pacotes = 0;
+	int i;
 	float aux;
 
 	long tam = get_tam_arquivo(nome,len);
@@ -91,7 +101,7 @@ void segmenta_arquivo(char nome[],int len){
 
 	pacote = (udp_file_msg*) calloc(num_pacotes,sizeof(udp_file_msg));
 
-	printf("num_pacotes: %d\n", num_pacotes);
+	//printf("num_pacotes: %d\n", num_pacotes);
 
 	//Abre o arquivo
 	FILE *arquivo = fopen(nome,"rb");
@@ -108,10 +118,8 @@ void segmenta_arquivo(char nome[],int len){
 		pacote[i].num_sequencia = i;
 		memset(&pacote[i].payload,0,sizeof(pacote[i].payload));
 		fread(pacote[i].payload,sizeof(pacote[i].payload),1,arquivo);
-		//printf("payload: %s\n",pacote.payload[i]);
 		//TODO: Mudar o jeito de indicar o payload size
 		pacote[i].payload_size = strlen(pacote[i].payload);
-		//printf("tamanho: %ld\n",strlen(pacote.payload[i]));
 	}
 
 	//Imprime
@@ -129,19 +137,19 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		mini_msg sms;
 		sms.msg_id = 1;
 		send(s, &sms, sizeof(sms), 0);
-		printf("Mensagem enviada: Hello\n");
+		//printf("Mensagem enviada: Hello\n");
 	}
 
 	//Cria a mensagem Info file
 	if(msg_id == 2){
 		//Recebe a mensagem Connection
-		printf("Mensagem recebida: Connection\n");
+		//printf("Mensagem recebida: Connection\n");
 
 		connection_msg conex;
-		int receive = recv(s, &conex, sizeof(conex),0);
-		printf("ID msg %u\nUDP port %u\nBytes lidos %d \n",conex.msg_id,conex.udp_port,receive);
+		recv(s, &conex, sizeof(conex),0);
+		//printf("ID msg %u\nUDP port %u\n\n",conex.msg_id,conex.udp_port);
 		server_addr.sin6_port = conex.udp_port;
-		printf("PORTA: %u\n", ntohs(server_addr.sin6_port));
+		//printf("PORTA: %u\n", ntohs(server_addr.sin6_port));
 
 		//Cria a mensagem Info File
 		info_file_msg info;
@@ -149,40 +157,79 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 		strcpy(info.nome_arquivo,nome);
 		info.tamanho_arquivo = get_tam_arquivo(nome,tam);
 		send(s, &info, sizeof(info), 0); 
-		printf("Mensagem enviada: Info File\n");
+		//printf("Mensagem enviada: Info File\n");
 	}
 
 	//Cria a mensagem Dados
 	if(msg_id == 4){
-		int i = 0, count = 0;
+		int count = 0;
 		ack_msg ack;
-		socklen_t server_addr_length = sizeof(server_addr);
-		printf("Mensagem recebida: Ok\n");
 		mini_msg sms;
+		int primeiro=0,ultimo=0,expected = 0, aux=0;
+		controle *ctrl;
+
+		//Inicializa vetor de acks
+		ctrl = (controle*)calloc(num_pacotes,sizeof(controle));
+
+		//socklen_t server_addr_length = sizeof(server_addr);
+		printf("Mensagem recebida: Ok\n");
         recv(s, &sms, sizeof(sms), 0);
+
 
 		//Cria a mensagem de dados
         segmenta_arquivo(nome,tam);
         //Manda via UDP para o servidor - No momento só manda um pacote
-        imprime_pacote_UDP(pacote[i]); 
+        //imprime_pacote_UDP(pacote[i]);
 
-        if((count = sendto(sock,&pacote[i],sizeof(pacote[i]),0,
-        	(struct sockaddr*)&server_addr,sizeof(server_addr))) < 0){
-        	logexit("Envio UDP falhou");
-        }
+        //Janela deslizante go back N
+        while(1){
+        	//Espera a disponibilidade do pacote
+        	if(ultimo < num_pacotes){//TODO ver se essa ehuma boa condição
+        		if(ultimo - primeiro >= WINDOW){
+        			//Nada
+        		}
+		        if((count = sendto(sock,&pacote[ultimo],sizeof(pacote[ultimo]),0,
+		        	(struct sockaddr*)&server_addr,sizeof(server_addr))) < 0){
+		        	logexit("Envio UDP falhou");
+		        }
+		        printf("Mensagem enviada: Dados\n");
+		        printf("\n\n ----------PACOTE ---------\n");
+		        imprime_pacote_UDP(pacote[ultimo]);
+		        printf("-------------------\n");
 
-        //while(1){
-	        printf("Mensagem enviada: Dados\n");
-	        imprime_pacote_UDP(pacote[i]);
-	        if((count = recvfrom(sock,&ack, sizeof(ack),0,(struct sockaddr*)
-	            &server_addr,&server_addr_length)) < 0){
-	            logexit("receive ack");
-	        } 
-	        printf("Recebi ack: %u %u\n", ack.msg_id,ack.num_sequencia);
-	        //if(count <= 0){
-            //	break;
-        	//}
-	    //}
+		        printf("Pacote %d de %d \n",ultimo, num_pacotes-1);
+		        ctrl[ultimo].tempo = clock();
+		        ultimo ++;
+        	}
+        	if(recv(s, &ack, sizeof(ack), MSG_PEEK)){
+		        if((count = recv(s, &ack, sizeof(ack), 0)) < 0){
+		            logexit("receive ack");
+		        } 
+		        printf("Recebi ack: %u %u\n", ack.msg_id,ack.num_sequencia);
+		        if(ack.num_sequencia == expected){
+		        	ctrl[ack.num_sequencia].ack = ack;
+		        	ctrl[ack.num_sequencia].recebido = 1;
+		        	ctrl[ack.num_sequencia].tempo = clock() - ctrl[ack.num_sequencia].tempo;
+		        	primeiro ++;
+		        	expected ++; 
+		        }
+	        }
+	        //Se o tempo acabou manda todos os pacotes que não foram recebidos 
+	        if(ctrl[primeiro].tempo >= TIMEOUT){
+	        	aux = primeiro;
+	        	while(aux < ultimo){
+		    		printf("Entra\n");
+	        		if((count = sendto(sock,&pacote[aux],sizeof(pacote[aux]),0,
+		        		(struct sockaddr*)&server_addr,sizeof(server_addr))) < 0){
+		        		logexit("Envio UDP falhou");
+		       		}
+		       		printf("Reenvia pacotes\n");
+			        //imprime_pacote_UDP(pacote[aux]);
+			        ctrl[aux].tempo = clock();
+			        aux++;	
+	        	}
+	        }
+    	}
 	}
 }
 
@@ -196,7 +243,7 @@ void recv_msg(char nome[]) {
   	while (1) {
 		memset(&sms, 0, sizeof(sms));
 		int receive = recv(s, &sms, sizeof(sms), MSG_PEEK);
-        printf("Mini msg %u Bytes lidos %d \n",sms.msg_id, receive);
+        //printf("Mini msg %u Bytes lidos %d \n",sms.msg_id, receive);
         if(receive > 0){
 			cria_mensagem(sms.msg_id,nome,strlen(nome));
 			fflush(stdout);
@@ -206,7 +253,6 @@ void recv_msg(char nome[]) {
     	}
     	//getchar();
   	}
-  	//printf("Saiu\n");
   	flag=1;
 }
 
@@ -238,7 +284,6 @@ int main(int argc, char **argv){
 	memset(&server_addr,0,sizeof(server_addr));
 	
 	server_addr.sin6_family = AF_INET6;
-	//server_addr.sin6_addr.s_addr = INADDR_ANY; 
 	inet_pton(AF_INET6,argv[1],&server_addr.sin6_addr);
 
 	struct sockaddr *addr = (struct sockaddr *)(&storage);
