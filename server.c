@@ -1,17 +1,21 @@
-#include "common.h"
-#include "lista.h"
-#include "mensagens.h"
-
-#include <pthread.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
-#include <sys/queue.h>
-
-#include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <math.h>
+#include <time.h>
+
+#include "common.h"
+#include "mensagens.h"
+#include "lista.h"
+
 
 #define MAX_CLIENTES 255
 
@@ -34,6 +38,9 @@ typedef struct {
     int udp_socket;
     struct sockaddr_in6 client_addr_UDP;
 }udp_data;
+
+udp_file_msg *pacote;
+int num_pacotes = 0;
 
 struct client_data *Clientes [MAX_CLIENTES];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -112,71 +119,88 @@ void imprime_pacote_UDP(udp_file_msg pacote){
 }
 
 
-
-/*void * UDP_thread(void *data){
-    printf("Entrou na etapa 4\n");
-
-    udp_data *valor = (udp_data*) data;
-    udp_file_msg dados;
-
-    memset(&dados, 0, sizeof(dados));
-    
-    printf("Tam udp_file_msg %ld\n",sizeof(udp_file_msg));
-    size_t count;
-    socklen_t client_struct_length = sizeof(valor->client_addr_UDP);
-
-    // Receive client's message:
-    while (1){
-        if((count = recvfrom(valor->udp_socket,&dados, sizeof(dados),0,(struct sockaddr*)
-            &valor->client_addr_UDP, &client_struct_length)) < 0){
-            logexit("receive UDP");
-        }
-
-        printf("Count %ld\n",count );
-        logexit("receive UDP");
-
-        imprime_pacote_UDP(dados); 
-        getchar();
-        if(count <= 0){
-            break;
-        }
-    }
-
-    printf("Estou aki\n");
-
-    pthread_exit(EXIT_SUCCESS);
-     
-}*/
-
-void UDP_connection(udp_data valor){
+void UDP_connection(udp_data valor, info_file_msg info){
 
     udp_file_msg dados;
+    float aux;
 
     memset(&dados, 0, sizeof(dados));
+
+    //Vê o número de pacotes
+    aux = (float)info.tamanho_arquivo/(float)BUFSZ;
+    num_pacotes = ceil(aux);
+
+    pacote = (udp_file_msg*) calloc(num_pacotes,sizeof(udp_file_msg));
+
+    printf("num_pacotes: %d\n", num_pacotes);
     
     printf("Tam udp_file_msg %ld\n",sizeof(udp_file_msg));
     size_t count;
     socklen_t client_struct_length = sizeof(valor.client_addr_UDP);
 
     // Receive client's message:
-    while (1){
+    //while (1){
         if((count = recvfrom(valor.udp_socket,&dados, sizeof(dados),0,(struct sockaddr*)
             &valor.client_addr_UDP, &client_struct_length)) < 0){
             logexit("receive UDP");
         }
+        else{//Manda o ack
+            ack_msg ack;
+            ack.msg_id = 7;
+            ack.num_sequencia = dados.num_sequencia;
 
-        printf("Count %ld\n",count );
-        //logexit("receive UDP");
+            if(sendto(valor.udp_socket,&ack,sizeof(ack),0,
+                (struct sockaddr*)&valor.client_addr_UDP,client_struct_length) < 0){
+                logexit("Envio ack falhou");
+            }
+        }
+        imprime_pacote_UDP(dados);
+        pacote[dados.num_sequencia] = dados;
+        printf("IMPRIME PACOTE\n");
+        imprime_pacote_UDP(pacote[dados.num_sequencia]); 
+        //getchar();
+        //if(count <= 0){
+        //   break;
+        //}
+    //}
+}
 
-        imprime_pacote_UDP(dados); 
-        getchar();
-        if(count <= 0){
+void renomeia_arquivo(char* nome, char* aux){
+    int i,pos=0;
+
+    for(i=0;i<strlen(nome);i++){
+        if(nome[i] != '.'){
+            aux[i] = nome[i];
+        }
+        else{
+            aux[i] = '2';
+            pos = i;//Posição do ponto
             break;
         }
     }
+    for(i=pos;i<=strlen(nome);i++){
+        aux[pos+1]=nome[i];
+        pos++;
+    }
 
-    printf("Estou aki\n");
+    aux[i] = '\0';
+    printf("Novo nome do arquivo %s\n", aux);
 }
+
+void monta_arquivo(info_file_msg info){
+    FILE * arquivo;
+    int i;
+    char novoNome[20];
+    renomeia_arquivo(info.nome_arquivo,novoNome);
+    if((arquivo = fopen(novoNome,"wb")) == NULL){
+        logexit("Falha na criacao do arquivo");
+    }
+    for(i=0;i<num_pacotes;i++){
+        fwrite(pacote[i].payload,pacote[i].payload_size,1,arquivo);
+    }
+    fclose(arquivo);
+}
+
 
 void cria_mensagem(unsigned short int msg_id,struct sockaddr_in6 server_addr_UDP,struct client_data *cdata, udp_data valor){
 
@@ -212,15 +236,11 @@ void cria_mensagem(unsigned short int msg_id,struct sockaddr_in6 server_addr_UDP
         
 
         //Cria thread UDP
-        UDP_connection(valor);
-        //udp_data *data = &valor;
-        //pthread_t tid;
-        //pthread_create(&tid, NULL,UDP_thread,data);
-
+        UDP_connection(valor,info);
+        printf("OIE\n");
+        monta_arquivo(info);
     }
 }
-
-//Funcoes de rede
 
 /*Esta função é chamada toda vez que criamos uma nova thread para um cliente, ou seja,
 novo cliente implica em nova thread. O que por sua vez que o cliente é acionado a um vetor de clientes.

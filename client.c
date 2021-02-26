@@ -5,10 +5,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <math.h>
+#include <time.h>
 
 #include "common.h"
 #include "mensagens.h"
@@ -107,6 +109,7 @@ void segmenta_arquivo(char nome[],int len){
 		memset(&pacote[i].payload,0,sizeof(pacote[i].payload));
 		fread(pacote[i].payload,sizeof(pacote[i].payload),1,arquivo);
 		//printf("payload: %s\n",pacote.payload[i]);
+		//TODO: Mudar o jeito de indicar o payload size
 		pacote[i].payload_size = strlen(pacote[i].payload);
 		//printf("tamanho: %ld\n",strlen(pacote.payload[i]));
 	}
@@ -151,7 +154,9 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
 
 	//Cria a mensagem Dados
 	if(msg_id == 4){
-		int i = 0;
+		int i = 0, count = 0;
+		ack_msg ack;
+		socklen_t server_addr_length = sizeof(server_addr);
 		printf("Mensagem recebida: Ok\n");
 		mini_msg sms;
         recv(s, &sms, sizeof(sms), 0);
@@ -160,16 +165,24 @@ void cria_mensagem(unsigned short int msg_id,char nome[],int tam){
         segmenta_arquivo(nome,tam);
         //Manda via UDP para o servidor - No momento só manda um pacote
         imprime_pacote_UDP(pacote[i]); 
-        if(sendto(sock,&pacote[i],sizeof(pacote[i]),0,
-        	(struct sockaddr*)&server_addr,sizeof(server_addr)) < 0){
+
+        if((count = sendto(sock,&pacote[i],sizeof(pacote[i]),0,
+        	(struct sockaddr*)&server_addr,sizeof(server_addr))) < 0){
         	logexit("Envio UDP falhou");
         }
 
-        printf("Mensagem enviada: Dados\n");
-        imprime_pacote_UDP(pacote[i]); 
-
-
-
+        //while(1){
+	        printf("Mensagem enviada: Dados\n");
+	        imprime_pacote_UDP(pacote[i]);
+	        if((count = recvfrom(sock,&ack, sizeof(ack),0,(struct sockaddr*)
+	            &server_addr,&server_addr_length)) < 0){
+	            logexit("receive ack");
+	        } 
+	        printf("Recebi ack: %u %u\n", ack.msg_id,ack.num_sequencia);
+	        //if(count <= 0){
+            //	break;
+        	//}
+	    //}
 	}
 }
 
